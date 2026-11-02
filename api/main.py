@@ -434,29 +434,13 @@ def update_existing_order(order_id: int, request: OrderCreateRequest, db: Sessio
     return jsonable_encoder(order)
 
 # ---------------------------------------------------------------------------------------------------------------
-# เพิ่ม Pydantic Schema สำหรับอัปเดตสถานะการพิมพ์
-class OrderPrintStatusUpdateRequest(BaseModel):
+from pydantic import BaseModel
+
+# 1. Pydantic Schema สำหรับรับค่าอัปเดตสถานะการพิมพ์
+class PrintStatusUpdate(BaseModel):
     is_printed: bool
 
-# API สำหรับอัปเดตสถานะการพิมพ์ของออเดอร์
-@app.patch("/api/orders/{order_id}/print-status")
-def update_order_print_status(order_id: int, request: OrderPrintStatusUpdateRequest, db: Session = Depends(get_db)):
-    order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="ไม่พบรายการออเดอร์นี้ในระบบ")
-        
-    order.is_printed = request.is_printed
-    try:
-        db.commit()
-        db.refresh(order)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"ไม่สามารถอัปเดตสถานะการพิมพ์ได้: {str(e)}")
-        
-    return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ", "is_printed": order.is_printed}
-
-
-# 1. API ให้ Local Agent ที่ร้าน ดึงออเดอร์ที่ยังไม่ได้พิมพ์
+# 2. API ให้คอมพิวเตอร์ตัวกลางที่ร้านดึงรายการออเดอร์ที่ยังไม่ได้พิมพ์
 @app.get("/api/orders/pending-print")
 def get_pending_print_orders(db: Session = Depends(get_db)):
     orders = db.query(models.OrderModel)\
@@ -468,15 +452,18 @@ def get_pending_print_orders(db: Session = Depends(get_db)):
     from fastapi.encoders import jsonable_encoder
     return jsonable_encoder(orders)
 
-class PrintStatusUpdate(BaseModel):
-    is_printed: bool
-
-# 2. API อัปเดตสถานะว่าพิมพ์เรียบร้อยแล้ว
+# 3. API อัปเดตสถานะว่าคอมพิวเตอร์ที่ร้านสั่งพิมพ์ออกเครื่อง Worrex สำเร็จแล้ว
 @app.patch("/api/orders/{order_id}/print-status")
 def update_print_status(order_id: int, request: PrintStatusUpdate, db: Session = Depends(get_db)):
     order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
     if not order:
-        raise HTTPException(status_code=404, detail="ไม่พบออเดอร์")
+        raise HTTPException(status_code=404, detail="ไม่พบออเดอร์นี้")
+    
     order.is_printed = request.is_printed
-    db.commit()
-    return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ"}
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ", "order_id": order.id}
