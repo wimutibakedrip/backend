@@ -434,8 +434,6 @@ def update_existing_order(order_id: int, request: OrderCreateRequest, db: Sessio
     return jsonable_encoder(order)
 
 # ---------------------------------------------------------------------------------------------------------------
-from pydantic import BaseModel
-
 # 1. Pydantic Schema สำหรับรับค่าอัปเดตสถานะการพิมพ์
 class PrintStatusUpdate(BaseModel):
     is_printed: bool
@@ -467,3 +465,31 @@ def update_print_status(order_id: int, request: PrintStatusUpdate, db: Session =
         raise HTTPException(status_code=400, detail=str(e))
         
     return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ", "order_id": order.id}
+
+class PrintRequestUpdate(BaseModel):
+    is_print_requested: bool
+
+# API ให้เครื่องที่ร้านดึงเฉพาะออร์เดอร์ที่ "มีคนกดสั่งพิมพ์เข้ามาแล้วเท่านั้น"
+@app.get("/api/orders/requested-print")
+def get_requested_print_orders(db: Session = Depends(get_db)):
+    orders = db.query(models.OrderModel)\
+                .options(joinedload(models.OrderModel.items).joinedload(models.OrderItemModel.product))\
+                .filter(models.OrderModel.is_print_requested == True)\
+                .filter(models.OrderModel.is_printed == False)\
+                .filter(models.OrderModel.status != models.OrderStatus.CANCELLED)\
+                .all()
+    
+    from fastapi.encoders import jsonable_encoder
+    return jsonable_encoder(orders)
+
+# API อัปเดตสถานะเมื่อพิมพ์เสร็จแล้ว ให้ปิดธงคำขอพิมพ์
+@app.patch("/api/orders/{order_id}/mark-printed")
+def mark_order_printed(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="ไม่พบออเดอร์นี้")
+    
+    order.is_print_requested = False  # ปิดคำขอพิมพ์
+    order.is_printed = True           # ตั้งค่าว่าพิมพ์เสร็จแล้ว
+    db.commit()
+    return {"message": "พิมพ์สำเร็จและเคลียร์คิวเรียบร้อย"}
