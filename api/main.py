@@ -482,6 +482,17 @@ def get_requested_print_orders(db: Session = Depends(get_db)):
     from fastapi.encoders import jsonable_encoder
     return jsonable_encoder(orders)
 
+@app.patch("/api/orders/{order_id}/request-print")
+def get_request_print_orders(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="ไม่พบออเดอร์นี้")
+    
+    order.is_print_requested = True  # คำขอพิมพ์
+    order.is_printed = False           # ยังไม่พิมพ์
+    db.commit()
+    return {"message": "จัดคิวเรียบร้อย"}
+
 # API อัปเดตสถานะเมื่อพิมพ์เสร็จแล้ว ให้ปิดธงคำขอพิมพ์
 @app.patch("/api/orders/{order_id}/mark-printed")
 def mark_order_printed(order_id: int, db: Session = Depends(get_db)):
