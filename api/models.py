@@ -47,6 +47,7 @@ class OrderModel(Base):
     status = Column(Enum(OrderStatus, native_enum=False), default=OrderStatus.PENDING)
     payment_method = Column(String, nullable=False, default="โอน")
     notes = Column(Text, nullable=True)     
+    is_printed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=get_thailand_time)
 
     # ความสัมพันธ์เชื่อมต่อไปหา OrderItemModel

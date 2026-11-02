@@ -37,6 +37,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# กำหนด IP ของเครื่องพิมพ์ความร้อนในร้าน
+PRINTER_IP = "192.168.1.87"
+
 # เปิดให้ภายนอกสามารถเข้ามาดึงรูปภาพในโฟลเดอร์ uploads ไปแสดงผลได้
 UPLOAD_DIR = "uploads"
 app.mount("/static-images", StaticFiles(directory=UPLOAD_DIR), name="static-images")
@@ -252,7 +255,8 @@ def get_all_orders(selected_date: Optional[str] = Query(None, description="YYYY-
             "id": order.id, "customer_name": order.customer_name, "subtotal_price": order.subtotal_price,
             "discount_price": order.discount_price, "grandtotal_price": order.grandtotal_price,
             "status": order.status.value if hasattr(order.status, 'value') else order.status,
-            "notes": order.notes, "payment_method": order.payment_method, 
+            "notes": order.notes, "payment_method": order.payment_method,
+            "is_printed": getattr(order, 'is_printed', False), 
             "created_at": order.created_at.isoformat() if order.created_at else None, "items": []  
         }
         for item in order.items:
@@ -429,3 +433,51 @@ def update_existing_order(order_id: int, request: OrderCreateRequest, db: Sessio
         
     from fastapi.encoders import jsonable_encoder
     return jsonable_encoder(order)
+
+# ---------------------------------------------------------------------------------------------------------------
+# เพิ่ม Pydantic Schema สำหรับอัปเดตสถานะการพิมพ์
+class OrderPrintStatusUpdateRequest(BaseModel):
+    is_printed: bool
+
+# API สำหรับอัปเดตสถานะการพิมพ์ของออเดอร์
+@app.patch("/api/orders/{order_id}/print-status")
+def update_order_print_status(order_id: int, request: OrderPrintStatusUpdateRequest, db: Session = Depends(get_db)):
+    order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="ไม่พบรายการออเดอร์นี้ในระบบ")
+        
+    order.is_printed = request.is_printed
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"ไม่สามารถอัปเดตสถานะการพิมพ์ได้: {str(e)}")
+        
+    return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ", "is_printed": order.is_printed}
+
+
+# 1. API ให้ Local Agent ที่ร้าน ดึงออเดอร์ที่ยังไม่ได้พิมพ์
+@app.get("/api/orders/pending-print")
+def get_pending_print_orders(db: Session = Depends(get_db)):
+    orders = db.query(models.OrderModel)\
+                .options(joinedload(models.OrderModel.items).joinedload(models.OrderItemModel.product))\
+                .filter(models.OrderModel.is_printed == False)\
+                .filter(models.OrderModel.status != models.OrderStatus.CANCELLED)\
+                .all()
+    
+    from fastapi.encoders import jsonable_encoder
+    return jsonable_encoder(orders)
+
+class PrintStatusUpdate(BaseModel):
+    is_printed: bool
+
+# 2. API อัปเดตสถานะว่าพิมพ์เรียบร้อยแล้ว
+@app.patch("/api/orders/{order_id}/print-status")
+def update_print_status(order_id: int, request: PrintStatusUpdate, db: Session = Depends(get_db)):
+    order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="ไม่พบออเดอร์")
+    order.is_printed = request.is_printed
+    db.commit()
+    return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ"}
