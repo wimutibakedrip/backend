@@ -30,7 +30,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#PRINTER_IP = "192.168.1.87"
 # เปิดให้ภายนอกสามารถเข้ามาดึงรูปภาพในโฟลเดอร์ uploads ไปแสดงผลได้
 UPLOAD_DIR = "uploads"
 app.mount("/static-images", StaticFiles(directory=UPLOAD_DIR), name="static-images")
