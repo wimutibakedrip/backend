@@ -24,72 +24,73 @@ def create_receipt_image(order):
     lines = []
     # ส่วนหัวใบเสร็จ
     lines.append(("center", "WIMUTI BAKE & DRIP", font_title))
-    lines.append(("center", "Order Ticket", font_small))
-    lines.append(("center", "-" * 58, font_normal))
+    lines.append(("center", "RECEIPT/ORDER", font_small))
+    lines.append(("center", "-" * 60, font_normal))
     
     # ข้อมูลออเดอร์
     order_id = order.get('id', '-')
     created_at = str(order.get('created_at', ''))[:19]
     customer_name = order.get('customer_name') or 'หน้าร้าน'
     payment_method = order.get('payment_method') or '-'
-
-    dt = datetime.datetime.fromisoformat(created_at)
-    dt_th = dt.replace(tzinfo=ZoneInfo("Asia/Bangkok"))
+    dt_th = datetime.datetime.fromisoformat(created_at).astimezone(ZoneInfo("Asia/Bangkok")).strftime("%d/%m/%Y %H:%M:%S")
 
     lines.append(("left_right", (f"Order : ", f"#{order_id}"), font_normal))
     lines.append(("left_right", (f"เวลา : ", f"{dt_th}"), font_normal))
     lines.append(("left_right", (f"ลูกค้า: {customer_name}", f"ชำระ: {payment_method}"), font_normal))
-    lines.append(("center", "-" * 48, font_normal))
+    lines.append(("center", "-" * 60, font_normal))
 
     # หัวตารางรายการสินค้า
     lines.append(("left_right", ("รายการ x จำนวน", "ราคา"), font_bold))
-    lines.append(("center", "-" * 48, font_normal))
+    lines.append(("center", "." * 60, font_normal))
 
     # รายการสินค้า (รองรับทั้ง key items หรือ order_items)
     items = order.get('items') or order.get('order_items') or []
+    qty_total = 0
     for item in items:
         product_info = item.get('product') or {}
         p_name = product_info.get('name') or item.get('product_name') or 'สินค้า'
         qty = item.get('quantity', 1)
+        qty_total = qty_total + qty
         price = item.get('price', 0)
         total_item_price = price * qty
 
-        item_text = f"{qty}x {p_name}"
+        item_text = f"{qty}x {p_name} ({price:.2f}/ea)"
         price_text = f"{total_item_price:.2f}"
-        lines.append(("item_row", (item_text, price_text), font_normal))
+        lines.append(("item_row", (item_text, price_text), font_bold))
 
         # ข้อความเพิ่มเติมหน้าเค้ก
         if item.get('custom_text'):
             lines.append(("left", f"  - หน้าเค้ก: \"{item['custom_text']}\"", font_small))
 
     # ส่วนสรุปราคา
-    lines.append(("center", "-" * 48, font_normal))
-    
-    # แก้ไขจุดที่เคยใช้ ?? ให้เป็นวิธีมาตรฐานของ Python
+    lines.append(("center", "-" * 60, font_normal))
+    lines.append(("left", f"Total: {qty_total} PCS.", font_normal))
+
     subtotal = order.get('subtotal_price')
     if subtotal is None:
         subtotal = order.get('total_price') or 0
 
-    lines.append(("left_right", ("รวมเงิน:", f"{subtotal:.2f} ฿"), font_normal))
+    lines.append(("left_right", ("Sub Total:", f"{subtotal:.2f} ฿"), font_normal))
 
     discount = order.get('discount_price', 0) or 0
     if discount > 0:
-        lines.append(("left_right", ("ส่วนลด:", f"-{discount:.2f} ฿"), font_normal))
+        lines.append(("left_right", ("Discount:", f"-{discount:.2f} ฿"), font_normal))
 
     grand_total = order.get('grandtotal_price')
     if grand_total is None:
         grand_total = order.get('total_price') or 0
 
-    lines.append(("left_right", ("ยอดสุทธิ:", f"{grand_total:.2f} ฿"), font_bold))
+    lines.append(("center", "." * 60, font_normal))
+    lines.append(("left_right", ("Net Total:", f"{grand_total:.2f} ฿"), font_bold))
 
     # หมายเหตุออเดอร์
     notes = order.get('notes')
     if notes:
-        lines.append(("center", "-" * 48, font_normal))
-        lines.append(("left", f"📌 หมายเหตุ: {notes}", font_normal))
+        lines.append(("center", "-" * 60, font_normal))
+        lines.append(("left", f"📌 Notes: {notes}", font_normal))
 
     lines.append(("center", "-" * 48, font_normal))
-    lines.append(("center", "*** ขอบคุณค่ะ ***", font_small))
+    lines.append(("center", "*** Thank you ***", font_small))
     lines.append(("center", "\n\n", font_normal))
 
     # วาดลงภาพ
