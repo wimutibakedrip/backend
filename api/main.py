@@ -1,3 +1,8 @@
+import datetime
+import time
+import shutil
+
+from . import models
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status, Query
 from fastapi.staticfiles import StaticFiles
@@ -6,29 +11,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Any, Optional
 from pydantic import BaseModel
-
-import os
-import datetime
-import time
-import shutil
-
-from . import models
 from .database import SessionLocal, engine, get_db
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_
 
-# สร้างตารางข้อมูลใน PostgreSQL ทันทีที่เปิด Server
+# สร้างตารางใน PostgreSQL ทันทีที่เปิด Server
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Wimuti Bakery API")
+origins =["http://localhost:5173", "https://wimuti.vercel.app", "*"]
 
-origins =[
-    "http://localhost:5173",
-    "https://wimuti.vercel.app",
-    "*"
-]
-
-# ปลดล็อก CORS เพื่อให้ React สามารถยิง API มาหา FastAPI ได้
+# CORS เพื่อให้ React สามารถยิง API มาหา FastAPI ได้
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  
@@ -37,8 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# กำหนด IP ของเครื่องพิมพ์ความร้อนในร้าน PRINTER_IP = "192.168.1.87"
-
+#PRINTER_IP = "192.168.1.87"
 # เปิดให้ภายนอกสามารถเข้ามาดึงรูปภาพในโฟลเดอร์ uploads ไปแสดงผลได้
 UPLOAD_DIR = "uploads"
 app.mount("/static-images", StaticFiles(directory=UPLOAD_DIR), name="static-images")
@@ -57,7 +49,7 @@ def verify_admin_password(request: AdminLoginRequest):
         )
     return {"message": "เข้าสู่ระบบสำเร็จ", "authenticated": True}
 
-# 👤 API สำหรับฝั่ง USER & ADMIN: ดึงข้อมูลเมนูทั้งหมด
+# API สำหรับฝั่ง USER & ADMIN: ดึงข้อมูลเมนูทั้งหมด
 @app.get("/api/products")
 def get_all_products(db: Session = Depends(get_db)):
     products = db.query(models.ProductModel).all()
@@ -83,7 +75,7 @@ async def create_product(
         file_location = f"{UPLOAD_DIR}/{clean_filename}"
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        image_url = f"https://vercel.app{clean_filename}"
+        image_url = f"/static-images/{clean_filename}"
 
     db_product = models.ProductModel(
         name=name, category=category, price=price, pieces=pieces,
