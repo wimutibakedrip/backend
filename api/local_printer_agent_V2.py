@@ -92,7 +92,7 @@ def create_order_ticket_image(order):
     return img.crop((0, 0, img_width, current_y + 10))
 
 #----------------------------------------------------------------------------------------------------------
-# 2. ฟังก์ชัน "ใบเสร็จรับเงิน" ต้นฉบับ (มี Logo และ QR Code)
+# 2. ฟังก์ชัน "ใบเสร็จรับเงิน" ต้นฉบับ (มี Logo, QR Code และเพิ่ม Social Media ด้านล่างสุด)
 def create_receipt_image(order):
     img_width = 576  
     margin = 20
@@ -177,9 +177,14 @@ def create_receipt_image(order):
         lines.append(("center", "-" * 66, font_normal))
         lines.append(("left", f"📌 Notes: {notes}", font_normal))
 
-    lines.append(("center", "\n\n", font_normal))
+    lines.append(("center", "\n", font_normal))
     lines.append(("center", "-" * 48, font_normal))
     lines.append(("center", "*** Thank you ***", font_small))
+    lines.append(("center", "\n", font_normal))
+
+    # 🆕 เพิ่มข้อความ Facebook และ Instagram ไว้ด้านล่างสุดของใบเสร็จ
+    lines.append(("center", "Facebook: Wimuti Bake & Drip", font_small))
+    lines.append(("center", "Instagram: Wimuti Bake & Drip", font_small))
     lines.append(("center", "\n", font_normal))
 
     logo_height = (logo_img.size[1] + 10) if logo_img else 0
@@ -229,7 +234,7 @@ def create_receipt_image(order):
     return img.crop((0, 0, img_width, current_y + 10))
 
 #----------------------------------------------------------------------------------------------------------
-# 3. ฟังก์ชัน "ใบเสร็จรับเงิน" Copy (มี Logo และ QR Code)
+# 3. ฟังก์ชัน "ใบเสร็จรับเงิน" Copy (มี Logo, QR Code และเพิ่ม Social Media ด้านล่างสุดเช่นกัน)
 def create_receipt_copy_image(order):
     img_width = 576  
     margin = 20
@@ -314,9 +319,14 @@ def create_receipt_copy_image(order):
         lines.append(("center", "-" * 66, font_normal))
         lines.append(("left", f"📌 Notes: {notes}", font_normal))
 
-    lines.append(("center", "\n\n", font_normal))
+    lines.append(("center", "\n", font_normal))
     lines.append(("center", "-" * 48, font_normal))
     lines.append(("center", "*** Thank you ***", font_small))
+    lines.append(("center", "\n", font_normal))
+
+    # 🆕 เพิ่มข้อความ Facebook และ Instagram ไว้ด้านล่างสุดของใบเสร็จสำเนา
+    lines.append(("center", "Facebook: Wimuti Bake & Drip", font_small))
+    lines.append(("center", "Instagram: Wimuti Bake & Drip", font_small))
     lines.append(("center", "\n", font_normal))
 
     logo_height = (logo_img.size[1] + 10) if logo_img else 0
@@ -376,15 +386,13 @@ def print_receipt_to_worrex(order):
         
         printed_any = False
 
-        # เลือกพิมพ์เฉพาะใบออเดอร์
         if is_print_order:
             order_image = create_order_ticket_image(order)
             printer.image(order_image)
             printer.cut()
             printed_any = True
-            print(f"[Success] พิมพ์ 'ใบออเดอร์' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+            print(f"[-] พิมพ์ใบออเดอร์ ออเดอร์ #{order['id']} สำเร็จ")
 
-        # เลือกพิมพ์เฉพาะใบเสร็จรับเงิน (พิมพ์ตัวจริง + สำเนา)
         if is_print_receipt:
             receipt_image = create_receipt_image(order)
             printer.image(receipt_image)
@@ -394,10 +402,10 @@ def print_receipt_to_worrex(order):
             printer.image(receipt_copy_image)
             printer.cut()
             printed_any = True
-            print(f"[Success] พิมพ์ 'ใบเสร็จรับเงิน + สำเนา' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+            print(f"[-] พิมพ์ใบเสร็จ ออเดอร์ #{order['id']} สำเร็จ")
 
         if not printed_any:
-            print(print(f"[-] ออเดอร์ #{order['id']} ไม่ได้ระบุประเภทงานพิมพ์"))
+            print(f"[-] ออเดอร์ #{order['id']} ไม่ได้ระบุประเภทงานพิมพ์")
             return False
 
         return True
