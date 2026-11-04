@@ -457,8 +457,11 @@ def update_print_status(order_id: int, request: PrintStatusUpdate, db: Session =
         
     return {"message": "อัปเดตสถานะการพิมพ์สำเร็จ", "order_id": order.id}
 
+# Schema สำหรับรับค่าคำขอพิมพ์
 class PrintRequestUpdate(BaseModel):
     is_print_requested: bool
+    is_print_order: Optional[bool] = False
+    is_print_receipt: Optional[bool] = False
 
 # API ให้เครื่องที่ร้านดึงเฉพาะออร์เดอร์ที่ "มีคนกดสั่งพิมพ์เข้ามาแล้วเท่านั้น"
 @app.get("/api/orders/requested-print")
@@ -470,19 +473,48 @@ def get_requested_print_orders(db: Session = Depends(get_db)):
                 .filter(models.OrderModel.status != models.OrderStatus.CANCELLED)\
                 .all()
     
+    # แปลงข้อมูลรวมถึงสถานะการพิมพ์แบบแยกประเภท
+    result = []
+    for order in orders:
+        order_dict = {
+            "id": order.id, 
+            "customer_name": order.customer_name, 
+            "subtotal_price": order.subtotal_price,
+            "discount_price": order.discount_price, 
+            "grandtotal_price": order.grandtotal_price,
+            "status": order.status.value if hasattr(order.status, 'value') else order.status,
+            "notes": order.notes, 
+            "payment_method": order.payment_method,
+            "is_printed": order.is_printed,
+            "is_print_order": getattr(order, 'is_print_order', False),
+            "is_print_receipt": getattr(order, 'is_print_receipt', False),
+            "created_at": order.created_at.isoformat() if order.created_at else None, 
+            "items": []  
+        }
+        for item in order.items:
+            item_dict = {
+                "id": item.id, "product_id": item.product_id, "quantity": item.quantity, "price": item.price,
+                "product": {"id": item.product.id, "name": item.product.name, "price": item.product.price} if item.product else None
+            }
+            order_dict["items"].append(item_dict)
+        result.append(order_dict)
+
     from fastapi.encoders import jsonable_encoder
-    return jsonable_encoder(orders)
+    return jsonable_encoder(result)
 
 @app.patch("/api/orders/{order_id}/request-print")
-def get_request_print_orders(order_id: int, db: Session = Depends(get_db)):
+def request_print_order(order_id: int, request: PrintRequestUpdate, db: Session = Depends(get_db)):
     order = db.query(models.OrderModel).filter(models.OrderModel.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="ไม่พบออเดอร์นี้")
     
-    order.is_print_requested = True  # คำขอพิมพ์
-    order.is_printed = False           # ยังไม่พิมพ์
+    order.is_print_requested = request.is_print_requested
+    order.is_print_order = request.is_print_order
+    order.is_print_receipt = request.is_print_receipt
+    order.is_printed = False  # รีเซ็ตสถานะเพื่อให้ Local Agent ทราบว่ามีงานรอพิมพ์
+    
     db.commit()
-    return {"message": "จัดคิวเรียบร้อย"}
+    return {"message": "จัดคิวพิมพ์เรียบร้อย"}
 
 # API อัปเดตสถานะเมื่อพิมพ์เสร็จแล้ว ให้ปิดธงคำขอพิมพ์
 @app.patch("/api/orders/{order_id}/mark-printed")

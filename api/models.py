@@ -48,6 +48,8 @@ class OrderModel(Base):
     notes = Column(Text, nullable=True)     
     is_printed = Column(Boolean, default=False)
     is_print_requested = Column(Boolean, default=False)
+    is_print_order = Column(Boolean, default=False)
+    is_print_receipt = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=get_thailand_time)
 
     # ความสัมพันธ์เชื่อมต่อไปหา OrderItemModel

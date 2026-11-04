@@ -24,12 +24,10 @@ def create_order_ticket_image(order):
     margin = 20
     lines = []
     
-    # เปลี่ยนหัวกระดาษเป็น ORDER
     lines.append(("center", "\n", font_normal))
     lines.append(("center", "** ORDER TICKET **", font_title))
     lines.append(("center", "-" * 66, font_normal))
     
-    # ข้อมูลออเดอร์
     order_id = order.get('id', '-')
     created_at = order.get('created_at', '')
     customer_name = order.get('customer_name') or 'หน้าร้าน'
@@ -40,7 +38,6 @@ def create_order_ticket_image(order):
     lines.append(("left", f"ลูกค้า: {customer_name}", font_bold))
     lines.append(("center", "-" * 66, font_normal))
 
-    # หัวตารางรายการสินค้า (แสดง Qty, Description และ Total Qty รวม)
     lines.append(("left_right", ("Qty x Description", "Item"), font_normal))
     lines.append(("center", "-" * 66, font_normal))
 
@@ -58,11 +55,9 @@ def create_order_ticket_image(order):
         if item.get('custom_text'):
             lines.append(("left", f"  - หน้าเค้ก: \"{item['custom_text']}\"", font_small))
 
-    # ส่วนสรุปจำนวนชิ้นรวม
     lines.append(("center", "-" * 66, font_normal))
     lines.append(("left_right", ("Total Quantity:", f"{qty_total} PCS."), font_bold))
 
-    # หมายเหตุออเดอร์ (เน้นย้ำสำหรับครัว)
     notes = order.get('notes')
     if notes:
         lines.append(("center", "-" * 66, font_normal))
@@ -70,7 +65,6 @@ def create_order_ticket_image(order):
 
     lines.append(("center", "\n\n", font_normal))
 
-    # วาดลงภาพ
     line_height = 26
     img_height = len(lines) * line_height + 40
     img = Image.new('RGB', (img_width, img_height), color='white')
@@ -235,7 +229,6 @@ def create_receipt_image(order):
 
 # 3. ฟังก์ชันสร้างภาพ "ใบเสร็จรับเงิน" Copy (มี Logo และ QR Code)
 def create_receipt_copy_image(order):
-    # คัดลอกโค้ดมาจาก create_receipt_image ปกติ แต่เปลี่ยนตรงส่วนหัวกระดาษ
     img_width = 576  
     margin = 20
     lines = []
@@ -266,7 +259,6 @@ def create_receipt_copy_image(order):
             print(f"[Error] โหลด QR Code ไม่สำเร็จ: {e}")
 
     lines.append(("center", "\n", font_normal))
-    # เปลี่ยนหัวข้อให้รู้ว่าเป็นใบสำเนา (COPY)
     lines.append(("center", "RECEIPT/ORDER (COPY)", font_title))
     lines.append(("center", "-" * 66, font_normal))
     
@@ -371,34 +363,47 @@ def create_receipt_copy_image(order):
 
     return img.crop((0, 0, img_width, current_y + 10))
 
-# 4. ควบคุมกระบวนการพิมพ์ 3 ใบต่อเนื่องในคำสั่งเดียว
+# 4. ควบคุมกระบวนการพิมพ์แยกตามประเภทที่ถูกเลือก (is_print_order หรือ is_print_receipt)
 def print_receipt_to_worrex(order):
     try:
         printer = Network(PRINTER_IP, port=9100, timeout=5, profile="default")
         
-        # --- ใบที่ 1: พิมพ์ใบออเดอร์สำหรับห้องครัว ---
-        order_image = create_order_ticket_image(order)
-        printer.image(order_image)
-        printer.cut() # สั่งตัดกระดาษคั่นระหว่างใบออเดอร์กับใบเสร็จ
+        is_print_order = order.get('is_print_order', False)
+        is_print_receipt = order.get('is_print_receipt', False)
         
-        # --- ใบที่ 2: พิมพ์ใบเสร็จรับเงินสำหรับลูกค้า ---
-        receipt_image = create_receipt_image(order)
-        printer.image(receipt_image)
-        printer.cut() # สั่งตัดกระดาษเมื่อจบใบเสร็จ
+        printed_any = False
 
-        # --- ใบที่ 3: พิมพ์ใบเสร็จรับเงิน (สำเนา - มีคำว่า COPY กำกับ) ---
-        receipt_copy_image = create_receipt_copy_image(order)
-        printer.image(receipt_copy_image)
-        printer.cut()
-        
-        print(f"[Success] พิมพ์ใบออเดอร์ + ใบเสร็จ (2 Copies) สำหรับออเดอร์ #{order['id']} สำเร็จ")
+        # ถ้าเลือกพิมพ์เฉพาะใบออเดอร์
+        if is_print_order:
+            order_image = create_order_ticket_image(order)
+            printer.image(order_image)
+            printer.cut()
+            printed_any = True
+            print(f"[Success] พิมพ์เฉพาะ 'ใบออเดอร์' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+
+        # ถ้าเลือกพิมพ์เฉพาะใบเสร็จรับเงิน (พิมพ์ตัวจริง + สำเนา)
+        if is_print_receipt:
+            receipt_image = create_receipt_image(order)
+            printer.image(receipt_image)
+            printer.cut()
+
+            receipt_copy_image = create_receipt_copy_image(order)
+            printer.image(receipt_copy_image)
+            printer.cut()
+            printed_any = True
+            print(f"[Success] พิมพ์เฉพาะ 'ใบเสร็จรับเงิน + สำเนา' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+
+        if not printed_any:
+            print(print(f"[-] ออเดอร์ #{order['id']} ไม่ได้ระบุประเภทงานพิมพ์"))
+            return False
+
         return True
     except Exception as e:
         print(f"[Error] พิมพ์ออเดอร์ #{order['id']} ไม่สำเร็จ: {str(e)}")
         return False
 
 def start_agent():
-    print(f"[*] Local Agent ทำงานแล้ว (โหมดพิมพ์ 2 ใบ: ออเดอร์ครัว + ใบเสร็จลูกค้า) | IP: {PRINTER_IP}")
+    print(f"[*] Local Agent ทำงานแล้ว (โหมดแยกพิมพ์ออเดอร์/ใบเสร็จ) | IP: {PRINTER_IP}")
     while True:
         try:
             response = requests.get(f"{VERCEL_API_URL}/orders/requested-print")
