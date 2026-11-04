@@ -18,7 +18,8 @@ try:
 except:
     font_title = font_bold = font_normal = font_small = ImageFont.load_default()
 
-# 1. ฟังก์ชันสร้างภาพ "ใบออเดอร์" สำหรับส่งเข้าครัว (ไม่มี Logo, ไม่มี QR Code, หัวข้อ ORDER)
+#----------------------------------------------------------------------------------------------------------
+# 1. ฟังก์ชัน "ใบออเดอร์" สำหรับส่งเข้าครัว (ไม่มี Logo, ไม่มี QR Code, หัวข้อ ORDER)
 def create_order_ticket_image(order):
     img_width = 576
     margin = 20
@@ -90,8 +91,8 @@ def create_order_ticket_image(order):
 
     return img.crop((0, 0, img_width, current_y + 10))
 
-
-# 2. ฟังก์ชันสร้างภาพ "ใบเสร็จรับเงิน" แบบเดิม (มี Logo และ QR Code)
+#----------------------------------------------------------------------------------------------------------
+# 2. ฟังก์ชัน "ใบเสร็จรับเงิน" ต้นฉบับ (มี Logo และ QR Code)
 def create_receipt_image(order):
     img_width = 576  
     margin = 20
@@ -227,7 +228,8 @@ def create_receipt_image(order):
 
     return img.crop((0, 0, img_width, current_y + 10))
 
-# 3. ฟังก์ชันสร้างภาพ "ใบเสร็จรับเงิน" Copy (มี Logo และ QR Code)
+#----------------------------------------------------------------------------------------------------------
+# 3. ฟังก์ชัน "ใบเสร็จรับเงิน" Copy (มี Logo และ QR Code)
 def create_receipt_copy_image(order):
     img_width = 576  
     margin = 20
@@ -363,7 +365,8 @@ def create_receipt_copy_image(order):
 
     return img.crop((0, 0, img_width, current_y + 10))
 
-# 4. ควบคุมกระบวนการพิมพ์แยกตามประเภทที่ถูกเลือก (is_print_order หรือ is_print_receipt)
+#----------------------------------------------------------------------------------------------------------
+# 4. กระบวนการพิมพ์แยกตามประเภทที่ถูกเลือก ใบออเดอร์/ใบเสร็จรับเงิน (is_print_order หรือ is_print_receipt)
 def print_receipt_to_worrex(order):
     try:
         printer = Network(PRINTER_IP, port=9100, timeout=5, profile="default")
@@ -373,15 +376,15 @@ def print_receipt_to_worrex(order):
         
         printed_any = False
 
-        # ถ้าเลือกพิมพ์เฉพาะใบออเดอร์
+        # เลือกพิมพ์เฉพาะใบออเดอร์
         if is_print_order:
             order_image = create_order_ticket_image(order)
             printer.image(order_image)
             printer.cut()
             printed_any = True
-            print(f"[Success] พิมพ์เฉพาะ 'ใบออเดอร์' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+            print(f"[Success] พิมพ์ 'ใบออเดอร์' สำหรับออเดอร์ #{order['id']} สำเร็จ")
 
-        # ถ้าเลือกพิมพ์เฉพาะใบเสร็จรับเงิน (พิมพ์ตัวจริง + สำเนา)
+        # เลือกพิมพ์เฉพาะใบเสร็จรับเงิน (พิมพ์ตัวจริง + สำเนา)
         if is_print_receipt:
             receipt_image = create_receipt_image(order)
             printer.image(receipt_image)
@@ -391,7 +394,7 @@ def print_receipt_to_worrex(order):
             printer.image(receipt_copy_image)
             printer.cut()
             printed_any = True
-            print(f"[Success] พิมพ์เฉพาะ 'ใบเสร็จรับเงิน + สำเนา' สำหรับออเดอร์ #{order['id']} สำเร็จ")
+            print(f"[Success] พิมพ์ 'ใบเสร็จรับเงิน + สำเนา' สำหรับออเดอร์ #{order['id']} สำเร็จ")
 
         if not printed_any:
             print(print(f"[-] ออเดอร์ #{order['id']} ไม่ได้ระบุประเภทงานพิมพ์"))
@@ -402,8 +405,10 @@ def print_receipt_to_worrex(order):
         print(f"[Error] พิมพ์ออเดอร์ #{order['id']} ไม่สำเร็จ: {str(e)}")
         return False
 
+#----------------------------------------------------------------------------------------------------------
+# สั่งให้ python ทำงานเพื่อตรวจสอบ Que Printer
 def start_agent():
-    print(f"[*] Local Agent ทำงานแล้ว (โหมดแยกพิมพ์ออเดอร์/ใบเสร็จ) | IP: {PRINTER_IP}")
+    print(f"[*] Local Printer Agent ทำงานแล้ว (พิมพ์ออเดอร์/ใบเสร็จ) | IP: {PRINTER_IP}")
     while True:
         try:
             response = requests.get(f"{VERCEL_API_URL}/orders/requested-print")
@@ -414,7 +419,7 @@ def start_agent():
                     if success:
                         requests.patch(f"{VERCEL_API_URL}/orders/{order['id']}/mark-printed")
         except Exception as e:
-            print(f"[-] เชื่อมต่อ Cloud ไม่สำเร็จ: {str(e)}")
+            print(f"[-] เชื่อมต่อ Cloud Printer ไม่สำเร็จ: {str(e)}")
         
         time.sleep(3)
 
