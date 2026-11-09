@@ -616,3 +616,73 @@ def get_pending_print_sales_reports(db: Session = Depends(get_db)):
 def clear_printed_sales_report(job_id: int):
     sales_report_queue.pending_reports = [r for r in sales_report_queue.pending_reports if r["id"] != job_id]
     return {"message": "เคลียร์คิวพิมพ์รายงานสำเร็จ"}
+
+#-------------------------------------------------------------------------------------------------------------------------------
+# เพิ่ม Dashboard
+@app.get("/api/sales/dashboard-analytics")
+def get_dashboard_analytics_report(selected_date: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if selected_date:
+        end_date = datetime.datetime.strptime(selected_date, "%Y-%m-%d").date()
+    else:
+        end_date = datetime.datetime.now(ZoneInfo("Asia/Bangkok")).date()
+        
+    start_date = end_date - datetime.timedelta(days=6)
+    local_order_date = func.date(func.timezone('Asia/Bangkok', models.OrderModel.created_at))
+    date_filter = and_(local_order_date >= start_date, local_order_date <= end_date)
+
+    # 1. รายได้รวมรายอาทิตย์
+    weekly_revenue = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0.0
+    
+    # 2. จำนวนบิลที่เสร็จสิ้น และหาค่าเฉลี่ย Ticket Size ต่อบิล
+    total_completed_orders = db.query(func.count(models.OrderModel.id)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0
+    avg_ticket_size = (weekly_revenue / total_completed_orders) if total_completed_orders > 0 else 0.0
+
+    # 3. สรุปประเภทการชำระเงินโอน และเงินสด
+    t_cash = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.CASH).scalar() or 0.0
+    t_transfer = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.TRANSFER).scalar() or 0.0
+    
+    pay_sum = t_cash + t_transfer
+    cash_p = (t_cash / pay_sum * 100) if pay_sum > 0 else 0
+    transfer_p = (t_transfer / pay_sum * 100) if pay_sum > 0 else 0
+
+    # 4. เจาะสถิติตัวเลขรายวันย้อนหลัง 7 วันเพื่อทำกราฟเส้น/แท่ง
+    daily_trend_list = []
+    max_daily_rev = 1.0 # ใช้ดักการหารเป็นศูนย์
+    
+    for i in range(7):
+        current_day = start_date + datetime.timedelta(days=i)
+        day_rev = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(local_order_date == current_day).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0.0
+        if day_rev > max_daily_rev:
+            max_daily_rev = day_rev
+        daily_trend_list.append({"date": current_day.strftime("%a (%d)"), "revenue": float(day_rev)})
+        
+    for day_data in daily_trend_list:
+        day_data["percent"] = (day_data["revenue"] / max_daily_rev) * 100
+
+    # 5. สรุปชื่อลูกค้าขาประจำสั่งซื้อบ่อยและยอดเปย์สูงสุด (Top Loyalty Buyers)
+    loyalty_buyers = db.query(
+        models.OrderModel.customer_name,
+        func.count(models.OrderModel.id).label("bill_count"),
+        func.sum(models.OrderModel.grandtotal_price).label("total_spent")
+    ).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED)\
+     .group_by(models.OrderModel.customer_name)\
+     .order_by(func.sum(models.OrderModel.grandtotal_price).desc()).limit(5).all()
+
+    top_buyers_list = [
+        {
+            "customer_name": b.customer_name or "ลูกค้าหน้าร้าน/ไม่ระบุชื่อ",
+            "total_orders": int(b.bill_count),
+            "total_spent": float(b.total_spent)
+        } for b in loyalty_buyers
+    ]
+
+    return {
+        "weekly_revenue": float(weekly_revenue),
+        "avg_ticket_size": float(avg_ticket_size),
+        "payment_summary": {
+            "cash": float(t_cash), "transfer": float(t_transfer),
+            "cash_percent": cash_p, "transfer_percent": transfer_p
+        },
+        "daily_trend": daily_trend_list,
+        "top_buyers": top_buyers_list
+    }
