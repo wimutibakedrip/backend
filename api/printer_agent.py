@@ -246,7 +246,7 @@ def create_sales_report_ticket(report_data):
     # รูปแบบการจัดคอลัมน์: อันดับ สินค้า จำนวนชิ้น ยอดเงิน
     lines.append(("table_header", ("อันดับ / รายชื่อเมนูสินค้า", "ชิ้น", "ยอดเงิน (฿)"), font_normal))
     lines.append(("center", "-" * 66, font_normal))
-    total_amount = 0
+    total_amount = 0.0
     
     for idx, prod in enumerate(report_data.get("top_products", [])):
         rank_str = f"#{idx + 1} "
@@ -258,8 +258,15 @@ def create_sales_report_ticket(report_data):
         # ใส่ชื่ออันดับและสินค้าทางฝั่งซ้าย และเก็บจำนวนชิ้นและยอดเงินรวมคอลัมน์ขวาตามลำดับ
         lines.append(("table_row", (f"{rank_str}{p_name}", qty_str, amount_str), font_small))
 
+    discount_total = report_data.get('total_discount', 0.0)
+    net_revenue_total = report_data.get('total_revenue', 0.0)
+
+    # ส่วนสรุปท้ายตารางแบบคิดคำนวณภาษี/ส่วนลดเพื่อโยงหาตัวเลขยอดรายได้สุทธิ
     lines.append(("center", "-" * 66, font_normal))
-    lines.append(("right", f"ยอดสุทธิรวม : {total_amount:.2f} ฿", font_bold))
+    lines.append(("right", f"ยอดรวมก่อนหักส่วนลด : {total_amount:.2f} ฿", font_normal))
+    lines.append(("right", f"ส่วนลดรวมสะสม (Discount) : -{discount_total:.2f} ฿", font_normal))
+    lines.append(("center", "=" * 66, font_normal))
+    lines.append(("right", f"รายได้รวมสุทธิ (Grand Total) : {net_revenue_total:.2f} ฿", font_bold))
     lines.append(("center", "\n", font_normal))
 
     lines.append(("center", "-" * 66, font_normal))
