@@ -225,38 +225,45 @@ def create_sales_report_ticket(report_data):
     
     lines.append(("center", "\n", font_normal))
     lines.append(("center", "Wimuti Bake & Drip", font_title))
-    lines.append(("center", "📊 รายงานสรุปยอดขายประจำสัปดาห์", font_bold))
-    lines.append(("center", f"รอบวันที่: {report_data['start_date']} ถึง {report_data['end_date']}", font_small))
+    lines.append(("center", "\n", font_normal))
+    lines.append(("center", "รายงานสรุปยอดขายประจำสัปดาห์", font_bold))
+    lines.append(("center", f"รอบวันที่: {report_data['start_date']} ถึง {report_data['end_date']}", font_normal))
     lines.append(("center", "-" * 66, font_normal))
     
     # ข้อมูลสรุปตัวเลขหลัก
-    lines.append(("left_right", ("💰 รายได้รวมสุทธิ:", f"{report_data['total_revenue']:.2f} ฿"), font_bold))
-    lines.append(("left_right", ("📦 จำนวนออเดอร์ที่สำเร็จ:", f"{report_data['total_orders']} ออเดอร์"), font_normal))
-    lines.append(("center", "." * 66, font_normal)) # เส้นประคั่นการเงิน
+    lines.append(("left_right", ("รายได้รวมสุทธิ:", f"{report_data['total_revenue']:.2f} ฿"), font_bold))
+    lines.append(("left_right", ("จำนวนออเดอร์ที่สำเร็จ:", f"{report_data['total_orders']} ออเดอร์"), font_normal))
+    lines.append(("center", "-" * 66, font_normal)) # เส้นประคั่นการเงิน
     lines.append(("left_right", ("  - ชำระด้วยเงินสด:", f"{report_data['total_cash']:.2f} ฿"), font_normal))
     lines.append(("left_right", ("  - ชำระด้วยยอดโอน:", f"{report_data['total_transfer']:.2f} ฿"), font_normal))
     lines.append(("center", "-" * 66, font_normal))
     
     # หัวข้ออันดับสินค้าขายดี
-    lines.append(("left", "🏆 อันดับเมนูมียอดขายสูงสุด (Top Selling)", font_bold))
+    lines.append(("left", "อันดับเมนูมียอดขายสูงสุด (Top Selling)", font_bold))
     lines.append(("center", "-" * 66, font_normal))
     
     # วาดหัวตารางจำลอง
     # รูปแบบการจัดคอลัมน์: อันดับ สินค้า จำนวนชิ้น ยอดเงิน
     lines.append(("table_header", ("อันดับ / รายชื่อเมนูสินค้า", "ชิ้น", "ยอดเงิน (฿)"), font_normal))
     lines.append(("center", "-" * 66, font_normal))
+    total_amount = 0
     
     for idx, prod in enumerate(report_data.get("top_products", [])):
         rank_str = f"#{idx + 1} "
         p_name = prod.get("name", "สินค้า")
         qty_str = f"{prod.get('qty', 0)}"
         amount_str = f"{prod.get('total_amount', 0.0):.2f}"
+        total_amount = total_amount + prod.get('total_amount', 0.0)
         
         # ใส่ชื่ออันดับและสินค้าทางฝั่งซ้าย และเก็บจำนวนชิ้นและยอดเงินรวมคอลัมน์ขวาตามลำดับ
         lines.append(("table_row", (f"{rank_str}{p_name}", qty_str, amount_str), font_small))
-        
+
     lines.append(("center", "-" * 66, font_normal))
-    lines.append(("center", f"พิมพ์เมื่อ: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", font_small))
+    lines.append(("right", f"ยอดสุทธิรวม : {total_amount:.2f} ฿", font_bold))
+    lines.append(("center", "\n", font_normal))
+
+    lines.append(("center", "-" * 66, font_normal))
+    lines.append(("center", f"พิมพ์เมื่อ: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", font_normal))
     lines.append(("center", "\n\n\n", font_normal))
 
     # คำนวณความสูงหน้ากระดาษแบบยืดหยุ่นตามจำนวนความยาวอันดับสินค้าที่มียอดขายจริง
@@ -264,12 +271,19 @@ def create_sales_report_ticket(report_data):
     d = ImageDraw.Draw(img)
     current_y = margin
     
+    # ส่วนลูปรันวาดรูปกราฟิกของฟังก์ชัน create_sales_report_ticket ในไฟล์ agent.py
     for line_type, text_data, font in lines:
         if line_type == "center":
             bbox = d.textbbox((0, 0), text_data, font=font)
             d.text(((img_width - (bbox[2] - bbox[0])) / 2, current_y), text_data, fill='black', font=font)
         elif line_type == "left":
             d.text((margin, current_y), text_data, fill='black', font=font)
+        
+        # เพิ่มเงื่อนไข "right" ชิดขวานี้เข้าไป เพื่อให้ยอดสุทธิแสดงผลออกกระดาษความร้อนสำเร็จ!
+        elif line_type == "right":
+            bbox = d.textbbox((0, 0), text_data, font=font)
+            d.text((img_width - margin - (bbox[2] - bbox[0]), current_y), text_data, fill='black', font=font)
+            
         elif line_type == "left_right":
             left_text, right_text = text_data
             d.text((margin, current_y), left_text, fill='black', font=font)
@@ -294,6 +308,7 @@ def create_sales_report_ticket(report_data):
         current_y += 26
         
     return img.crop((0, 0, img_width, current_y + 10))
+
 
 # 🆕 ฟังก์ชันคำสั่งยิงพิมพ์รายงานผ่านระบบเน็ตเวิร์กเข้าเครื่องพิมพ์ Worrex
 def print_sales_report_to_worrex(report_data):

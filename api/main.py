@@ -557,6 +557,7 @@ def request_print_sales_report(selected_date: str = Query(..., description="YYYY
 # 2. API ให้ Local Printer Agent ยิงมาสแกนตรวจหาคิวงานพิมพ์รายงานยอดขายที่ค้างอยู่
 @app.get("/api/sales/pending-print-report")
 def get_pending_print_sales_reports(db: Session = Depends(get_db)):
+    
     if not sales_report_queue.pending_reports:
         return []
     
@@ -573,7 +574,9 @@ def get_pending_print_sales_reports(db: Session = Depends(get_db)):
     total_revenue = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0.0
     total_cash = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.CASH).scalar() or 0.0 
     total_transfer = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.TRANSFER).scalar() or 0.0
-    
+
+    total_discount = db.query(func.sum(models.OrderModel.discount_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0.0
+
     completed_orders_count = db.query(func.count(models.OrderModel.id)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0
     
     # 20 อันดับสินค้าขายดี พร้อมคำนวณยอดเงินรวมของแต่ละสินค้าเพิ่มเติม (ราคาคูณจำนวน)
@@ -604,6 +607,7 @@ def get_pending_print_sales_reports(db: Session = Depends(get_db)):
         "total_orders": int(completed_orders_count),
         "total_cash": float(total_cash),
         "total_transfer": float(total_transfer),
+        "total_discount": float(total_discount), 
         "top_products": top_products_list
     }]
 
