@@ -679,6 +679,7 @@ def get_dashboard_analytics_report(selected_date: Optional[str] = Query(None), d
     return {
         "weekly_revenue": float(weekly_revenue),
         "avg_ticket_size": float(avg_ticket_size),
+        "total_completed_orders": int(total_completed_orders),
         "payment_summary": {
             "cash": float(t_cash), "transfer": float(t_transfer),
             "cash_percent": cash_p, "transfer_percent": transfer_p
