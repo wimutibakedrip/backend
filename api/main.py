@@ -534,3 +534,81 @@ def mark_order_printed(order_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "พิมพ์สำเร็จและเคลียร์คิวเรียบร้อย"}
+
+#----------------------------------------------------------------------------------------
+# API คำขอพิมพ์รายงานสรุปยอดขาย
+# 🆕 คลาสจำลองสเตตเก็บข้อมูลคิวพิมพ์รายงานส่วนกลางชั่วคราว (หรือจะสร้างตารางใน Postgres เพิ่มเติมก็ได้เช่นกันครับ)
+class SalesReportPrintQueue:
+    pending_reports = []  # เก็บลิสต์ของคำขอพิมพ์สรุปยอดขาย เช่น [{"date": "2026-11-09", "id": 16900000}]
+
+sales_report_queue = SalesReportPrintQueue()
+
+# 1. API ฝั่งแอดมินสำหรับกดสั่งพิมพ์จากหน้าบ้าน (React)
+@app.patch("/api/sales/request-print-report")
+def request_print_sales_report(selected_date: str = Query(..., description="YYYY-MM-DD")):
+    import time
+    report_request = {
+        "id": int(time.time()),
+        "selected_date": selected_date
+    }
+    sales_report_queue.pending_reports.append(report_request)
+    return {"message": "จัดคิวพิมพ์รายงานสำเร็จ", "report_id": report_request["id"]}
+
+# 2. API ให้ Local Printer Agent ยิงมาสแกนตรวจหาคิวงานพิมพ์รายงานยอดขายที่ค้างอยู่
+@app.get("/api/sales/pending-print-report")
+def get_pending_print_sales_reports(db: Session = Depends(get_db)):
+    if not sales_report_queue.pending_reports:
+        return []
+    
+    # เอาคิวแรกสุดออกไปประมวลผลคำนวณตัวเลขและดึงรายการสินค้า 20 อันดับทันที
+    current_job = sales_report_queue.pending_reports[0]
+    target_date = current_job["selected_date"]
+    
+    # คำนวณสรุปยอดขาย (Copy Logic จากสเปก API ยอดขายเดิมของคุณมาดึงข้อมูลจริง)
+    end_date = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
+    start_date = end_date - datetime.timedelta(days=6)
+    local_order_date = func.date(func.timezone('Asia/Bangkok', models.OrderModel.created_at))
+    date_filter = and_(local_order_date >= start_date, local_order_date <= end_date)
+    
+    total_revenue = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0.0
+    total_cash = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.CASH).scalar() or 0.0 
+    total_transfer = db.query(func.sum(models.OrderModel.grandtotal_price)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).filter(models.OrderModel.payment_method == models.OrderPayment.TRANSFER).scalar() or 0.0
+    
+    completed_orders_count = db.query(func.count(models.OrderModel.id)).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).scalar() or 0
+    
+    # 20 อันดับสินค้าขายดี พร้อมคำนวณยอดเงินรวมของแต่ละสินค้าเพิ่มเติม (ราคาคูณจำนวน)
+    top_items = db.query(
+        models.OrderItemModel.product_id, 
+        func.sum(models.OrderItemModel.quantity).label("total_qty")
+    ).join(models.OrderModel).filter(date_filter).filter(models.OrderModel.status == models.OrderStatus.COMPLETED).group_by(models.OrderItemModel.product_id).order_by(func.sum(models.OrderItemModel.quantity).desc()).limit(20).all()
+    
+    top_products_list = []
+    for item in top_items:
+        prod = db.query(models.ProductModel).filter(models.ProductModel.id == item.product_id).first()
+        if prod:
+            # คำนวณราคารวมที่ขายได้ของสินค้านั้น ๆ ในรอบสัปดาห์
+            total_item_sales_amount = prod.price * int(item.total_qty)
+            top_products_list.append({
+                "name": prod.name, 
+                "qty": int(item.total_qty), 
+                "category": prod.category,
+                "total_amount": float(total_item_sales_amount)
+            })
+
+    # ส่งก้อนข้อมูลสรุปที่สมบูรณ์กลับไปให้ Agent วาดรูปกราฟิกเพื่อพิมพ์ลงกระดาษความร้อน
+    return [{
+        "job_id": current_job["id"],
+        "start_date": start_date.strftime("%d/%m/%Y"),
+        "end_date": end_date.strftime("%d/%m/%Y"),
+        "total_revenue": float(total_revenue),
+        "total_orders": int(completed_orders_count),
+        "total_cash": float(total_cash),
+        "total_transfer": float(total_transfer),
+        "top_products": top_products_list
+    }]
+
+# 3. API สั่งเคลียร์คิวพิมพ์รายงานเมื่อฝั่ง Agent แจ้งพิมพ์กระดาษเสร็จแล้ว
+@app.delete("/api/sales/clear-print-report/{job_id}")
+def clear_printed_sales_report(job_id: int):
+    sales_report_queue.pending_reports = [r for r in sales_report_queue.pending_reports if r["id"] != job_id]
+    return {"message": "เคลียร์คิวพิมพ์รายงานสำเร็จ"}
